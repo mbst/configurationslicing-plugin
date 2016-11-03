@@ -26,7 +26,8 @@ public class DockerRegistryURLSlicer extends UnorderedStringSlicer<AbstractProje
 
         @Override
         public String getSliceParam(DockerBuilder builder) {
-            return builder.getRegistry().getUrl();
+
+            return builder.getRegistry().getUrl() != null ? builder.getRegistry().getUrl() : NOTHING;
         }
 
         @Override

@@ -26,7 +26,8 @@ public class DockerRepoTagSlicer extends UnorderedStringSlicer<AbstractProject<?
 
         @Override
         public String getSliceParam(DockerBuilder builder) {
-            return builder.getRepoTag();
+
+            return builder.getRepoTag() != null ? builder.getRepoTag() : NOTHING;
         }
 
         @Override

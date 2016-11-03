@@ -23,7 +23,7 @@ public abstract class AbstractDockerSlicerSpec
 
     private static final Logger log = LoggerFactory.getLogger(AbstractDockerSlicerSpec.class);
 
-    private static final String NOTHING = "(Nothing)";
+    static final String NOTHING = "(Nothing)";
     static final String DEFAULT = "(Default)";
 
     public abstract String getName();
@@ -87,11 +87,13 @@ public abstract class AbstractDockerSlicerSpec
 
         for (int i = 0; i < values.size(); i++) {
             String value = values.get(i);
-            if(valueIsWritable(value)) {
-                newBuilders[i] = oldBuilders[i];
-                if((oldBuilders[i] != null && !getSliceParam(oldBuilders[i]).equals(value))) {
-                    newBuilders[i] = setSliceParam(newBuilders[i], value);
+            newBuilders[i] = oldBuilders[i];
+
+            if(oldBuilders[i] != null && !getSliceParam(oldBuilders[i]).equals(value)) {
+                if(valueIsNotWritable(value)) {
+                    value = "";
                 }
+                newBuilders[i] = setSliceParam(newBuilders[i], value);
             }
         }
 
@@ -99,6 +101,11 @@ public abstract class AbstractDockerSlicerSpec
         for (int i = 0; i < maxListSize; i++) {
             if (oldBuilders[i] != null && newBuilders[i] != null && oldBuilders[i] != newBuilders[i]) {
                 replaceBuilder(buildersList, oldBuilders[i], newBuilders[i]);
+                log.info(
+                        "updated DockerBuilder config {} in project {}",
+                        getUrl(),
+                        item.getFullName()
+                );
             }
         }
 
@@ -107,8 +114,8 @@ public abstract class AbstractDockerSlicerSpec
             if (oldBuilders[i] == null && newBuilders[i] != null) {
                 buildersList.add(newBuilders[i]);
                 log.warn(
-                        "added new builder {} to list",
-                        oldBuilders[i].getDescriptor().getDisplayName()
+                        "added new DockerBuilder to builders list because of {}",
+                        getUrl()
                 );
             }
         }
@@ -118,8 +125,9 @@ public abstract class AbstractDockerSlicerSpec
             if (oldBuilders[i] != null && newBuilders[i] == null) {
                 buildersList.remove(oldBuilders[i]);
                 log.error(
-                        "removed builder {} from list",
-                        oldBuilders[i].getDescriptor().getDisplayName()
+                        "removed DockerBuilder from builders list because of {}",
+                        getUrl()
+
                 );
             }
         }
@@ -147,8 +155,8 @@ public abstract class AbstractDockerSlicerSpec
         return builders.getAll(DockerBuilder.class);
     }
 
-    private boolean valueIsWritable(String value) {
-        return !(value.equals(NOTHING) || value.isEmpty());
+    private boolean valueIsNotWritable(String value) {
+        return (value.isEmpty() || value.equals(NOTHING) || value.equals(DEFAULT));
     }
 
     private void replaceBuilder(

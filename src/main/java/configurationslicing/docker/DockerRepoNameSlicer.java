@@ -4,7 +4,8 @@ import com.cloudbees.dockerpublish.DockerBuilder;
 import configurationslicing.UnorderedStringSlicer;
 import hudson.Extension;
 import hudson.model.AbstractProject;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Extension
 public class DockerRepoNameSlicer extends UnorderedStringSlicer<AbstractProject<?,?>> {
@@ -13,6 +14,8 @@ public class DockerRepoNameSlicer extends UnorderedStringSlicer<AbstractProject<
 
     public static class DockerSlicerSpec extends
             AbstractDockerSlicerSpec {
+
+        private static final Logger log = LoggerFactory.getLogger(DockerRepoNameSlicer.class);
 
         @Override
         public String getName() {
@@ -33,6 +36,10 @@ public class DockerRepoNameSlicer extends UnorderedStringSlicer<AbstractProject<
         public DockerBuilder setSliceParam(DockerBuilder builder, String value) {
             // setting repo name isn't exposed by the api so we're copying the current one and
             // replacing the repo name using the constructor
+            if(value == null || value.isEmpty()) {
+                log.error("Repo name cannot be null or empty for: {}", builder.getRepoName());
+                return builder;
+            }
             return setRepoName(builder, value);
         }
 

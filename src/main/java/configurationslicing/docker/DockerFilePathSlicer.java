@@ -34,11 +34,7 @@ public class DockerFilePathSlicer extends UnorderedStringSlicer<AbstractProject<
 
         @Override
         public DockerBuilder setSliceParam(DockerBuilder builder, String value) {
-            if (!value.equals(DEFAULT)) {
-                builder.setDockerfilePath(value);
-            } else {
-                builder.setDockerfilePath(null);
-            }
+            builder.setDockerfilePath(value);
             return builder;
         }
 
