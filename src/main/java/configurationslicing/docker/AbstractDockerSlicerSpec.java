@@ -23,8 +23,8 @@ public abstract class AbstractDockerSlicerSpec
 
     private static final Logger log = LoggerFactory.getLogger(AbstractDockerSlicerSpec.class);
 
-    static final String NOTHING = "(Nothing)";
-    static final String DEFAULT = "(Default)";
+    public static final String NOTHING = "(Nothing)";
+    public static final String DEFAULT = "(Default)";
 
     public abstract String getName();
     public abstract String getUrl();
@@ -42,14 +42,14 @@ public abstract class AbstractDockerSlicerSpec
     }
 
     public List<AbstractProject<?, ?>> getWorkDomain() {
-        List<AbstractProject<?, ?>> list = new ArrayList<AbstractProject<?, ?>>();
-        List<AbstractProject> temp = Jenkins.getInstance().getAllItems(AbstractProject.class);
-        for (AbstractProject p: temp) {
-            if (p instanceof Project || p instanceof MatrixProject) {
-                list.add(p);
+        List<AbstractProject<?, ?>> filteredProjects = new ArrayList<AbstractProject<?, ?>>();
+        List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
+        for (AbstractProject project: allProjects) {
+            if (project instanceof Project || project instanceof MatrixProject) {
+                filteredProjects.add(project);
             }
         }
-        return list;
+        return filteredProjects;
     }
 
 
@@ -100,34 +100,25 @@ public abstract class AbstractDockerSlicerSpec
         // perform any replacements
         for (int i = 0; i < maxListSize; i++) {
             if (oldBuilders[i] != null && newBuilders[i] != null && oldBuilders[i] != newBuilders[i]) {
-                replaceBuilder(buildersList, oldBuilders[i], newBuilders[i]);
                 log.info(
-                        "updated DockerBuilder config {} in project {}",
+                        "Updating DockerBuilder config {} for project {}",
                         getUrl(),
                         item.getFullName()
                 );
+                replaceBuilder(buildersList, oldBuilders[i], newBuilders[i]);
             }
         }
 
-        // add any new ones (can't see when this would happen)
+        // add any new ones (this shouldn't happen)
         for (int i = 0; i < maxListSize; i++) {
             if (oldBuilders[i] == null && newBuilders[i] != null) {
                 buildersList.add(newBuilders[i]);
-                log.warn(
-                        "added new DockerBuilder to builders list because of {}",
-                        getUrl()
-                );
-            }
-        }
-
-        // delete old ones (this shouldn't happen)
-        for (int i = 0; i < maxListSize; i++) {
-            if (oldBuilders[i] != null && newBuilders[i] == null) {
-                buildersList.remove(oldBuilders[i]);
                 log.error(
-                        "removed DockerBuilder from builders list because of {}",
+                        "Added new DockerBuilder to builders list on project {} because of {}. "
+                                + "This builder will not be set up correctly and will require "
+                                + "manual configuration on the project configuration page.",
+                        item.getFullName(),
                         getUrl()
-
                 );
             }
         }
@@ -165,9 +156,9 @@ public abstract class AbstractDockerSlicerSpec
             Builder newBuilder
     ) {
         List<Builder> newList = Lists.newArrayList(builders.toList());
-        for(int i = 0; i < newList.size(); i++) {
+        for (int i = 0; i < newList.size(); i++) {
             Builder builder = newList.get(i);
-            if(builder == oldBuilder) {
+            if (builder == oldBuilder) {
                 newList.set(i, newBuilder);
             }
         }
@@ -176,8 +167,8 @@ public abstract class AbstractDockerSlicerSpec
             builders.replaceBy(newList);
         } catch (IOException e) {
             log.error(
-                    "Failed to replace builder {} in list",
-                    oldBuilder.getDescriptor().getDisplayName()
+                    "Failed to update DockerBuilder config {}",
+                    getUrl()
             );
             Throwables.propagate(e);
         }
