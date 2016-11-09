@@ -41,6 +41,7 @@ public abstract class AbstractDockerSlicerSpec
         return item.getDisplayName();
     }
 
+    @Override
     public List<AbstractProject<?, ?>> getWorkDomain() {
         List<AbstractProject<?, ?>> filteredProjects = new ArrayList<AbstractProject<?, ?>>();
         List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
