@@ -85,15 +85,20 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
             List<String> values = parseValues(rawValues);
 
-            if (property == null && !values.isEmpty()) {
-                property = tryCreateProperty(item);
-                if (property == null) {
-                    return false;
+            if (property == null) {
+                if (!values.isEmpty()) {
+                    property = tryCreateProperty(item);
+                    if (property == null) {
+                        return false;
+                    }
+                } else {
+                    return true;
                 }
             }
 
             if(rawValues.get(0).equals(NOTHING) && property != null) {
                 property.getActiveItems().removeAll(property.getActiveItems());
+                return true;
             }
 
             Map<String, PromotionProcess> oldPromotions = new HashMap<String, PromotionProcess>();
