@@ -37,6 +37,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
         @Override
         public String getUrl() { return "promotedbuilds"; }
 
+        // This sliced field has no default value
         @Override
         public String getDefaultValueString() { return ""; }
 
@@ -64,11 +65,11 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
             List<String> valuesList = new ArrayList<String>();
 
             if (property != null) {
-                String del = "";
+                String nameString = "";
                 for(PromotionProcess process : property.getActiveItems()) {
-                    del = (String.format("%s[%s] ", del, process.getName()));
+                    nameString = (String.format("%s[%s] ", nameString, process.getName()));
                 }
-                valuesList.add(del.trim());
+                valuesList.add(nameString.trim());
             }
             if (valuesList.isEmpty() || valuesList.get(0).equals("")) {
                 valuesList.add(NOTHING);
