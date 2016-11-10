@@ -39,7 +39,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
         // This sliced field has no default value
         @Override
-        public String getDefaultValueString() { return ""; }
+        public String getDefaultValueString() { return NOTHING; }
 
         @Override
         public String getName(AbstractProject<?,?> item) { return item.getFullName(); }
@@ -64,7 +64,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
             List<String> valuesList = new ArrayList<String>();
 
-            if (property != null) {
+            if (property != null && !property.getActiveItems().isEmpty()) {
                 String nameString = "";
                 for(PromotionProcess process : property.getActiveItems()) {
                     nameString = (String.format("%s[%s] ", nameString, process.getName()));
@@ -92,7 +92,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 }
             }
 
-            if(rawValues.get(0).equals(NOTHING)) {
+            if(rawValues.get(0).equals(NOTHING) && property != null) {
                 property.getActiveItems().removeAll(property.getActiveItems());
             }
 
@@ -128,8 +128,8 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
             List<String> values = new ArrayList<String>();
 
-            Pattern regex = Pattern.compile("\\[(.*?)\\]");
-            Matcher regexMatcher = regex.matcher(rawValues.get(0).replace(" ", ""));
+            Pattern stringInSquareBrackets = Pattern.compile("\\[(.*?)\\]");
+            Matcher regexMatcher = stringInSquareBrackets.matcher(rawValues.get(0).replace(" ", ""));
             while (regexMatcher.find()) {
                 values.add(regexMatcher.group(1));
             }

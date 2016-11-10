@@ -32,7 +32,6 @@ public class PromotedBuildNameSlicerTest extends HudsonTestCase {
         assert(spec.getValues(project).equals(Lists.newArrayList(spec.NOTHING)));
 
         assert(spec.setValues(project, rawValueListOne));
-        System.out.println(project.getProperty(JobPropertyImpl.class).getActiveItems().get(0).getName());
 
         List<String> values = spec.getValues(project);
         assert(values.get(0).equals(rawValueStringOne));
