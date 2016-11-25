@@ -1,6 +1,7 @@
 package configurationslicing.docker;
 
 import com.cloudbees.dockerpublish.DockerBuilder;
+import com.google.common.base.Objects;
 import configurationslicing.UnorderedStringSlicer;
 import hudson.Extension;
 import hudson.model.AbstractProject;
@@ -27,7 +28,7 @@ public class DockerRegistryURLSlicer extends UnorderedStringSlicer<AbstractProje
         @Override
         public String getSliceParam(DockerBuilder builder) {
 
-            return builder.getRegistry().getUrl() != null ? builder.getRegistry().getUrl() : NOTHING;
+            return Objects.firstNonNull(builder.getRegistry().getUrl(), NOTHING);
         }
 
         @Override

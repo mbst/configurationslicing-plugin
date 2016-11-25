@@ -1,14 +1,14 @@
 package configurationslicing.promotedbuilds;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import configurationslicing.UnorderedStringSlicer;
 import hudson.Extension;
 import hudson.matrix.MatrixProject;
@@ -29,6 +29,9 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
     public static class PromotedBuildsSlicerSpec extends UnorderedStringSlicerSpec<AbstractProject<?,?>> {
 
         private static final Logger log = LoggerFactory.getLogger(PromotedBuildsSlicerSpec.class);
+
+        private static final Pattern STRING_IN_SQUARE_BRACKETS = Pattern.compile("\\[(.*?)\\]");
+
         public static final String NOTHING = "(NOTHING)";
 
         @Override
@@ -46,7 +49,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
         @Override
         public List<AbstractProject<?,?>> getWorkDomain() {
-            List<AbstractProject<?,?>> filteredProjects = new ArrayList<AbstractProject<?,?>>();
+            List<AbstractProject<?,?>> filteredProjects = Lists.newArrayList();
             List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
 
             for (AbstractProject project: allProjects) {
@@ -62,12 +65,12 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
             JobPropertyImpl property = item.getProperty(JobPropertyImpl.class);
 
-            List<String> valuesList = new ArrayList<String>();
+            List<String> valuesList = Lists.newArrayList();
 
             if (property != null && !property.getActiveItems().isEmpty()) {
                 String nameString = "";
                 for(PromotionProcess process : property.getActiveItems()) {
-                    nameString = (String.format("%s[%s] ", nameString, process.getName()));
+                    nameString = String.format("%s[%s] ", nameString, process.getName());
                 }
                 valuesList.add(nameString.trim());
             }
@@ -96,26 +99,26 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 }
             }
 
-            if(rawValues.get(0).equals(NOTHING) && property != null) {
+            if(rawValues.get(0).equals(NOTHING)) {
                 property.getActiveItems().removeAll(property.getActiveItems());
                 return true;
             }
 
-            Map<String, PromotionProcess> oldPromotions = new HashMap<String, PromotionProcess>();
+            Map<String, PromotionProcess> oldPromotions = Maps.newHashMap();
             for(PromotionProcess promotionProcess : property.getActiveItems()) {
                 oldPromotions.put(promotionProcess.getName(), promotionProcess);
             }
 
             // Remove old promotions
-            for(String oldName : oldPromotions.keySet()) {
-                if(!values.contains(oldName)) {
-                    property.getActiveItems().remove(oldPromotions.get(oldName));
+            for(Map.Entry<String, PromotionProcess> oldEntry : oldPromotions.entrySet()) {
+                if(!values.contains(oldEntry.getKey())) {
+                    property.getActiveItems().remove(oldEntry.getValue());
                 }
             }
 
             // Add new promotions
             for(String newName : values) {
-                if(!oldPromotions.keySet().contains(newName)) {
+                if (!oldPromotions.keySet().contains(newName)) {
                     try {
                         property.addProcess(newName);
                     } catch (IOException e) {
@@ -125,16 +128,19 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                     }
                 }
             }
-
+            try {
+                item.addProperty(property);
+            } catch (IOException e) {
+                Throwables.propagate(e);
+            }
             return true;
         }
 
         private List<String> parseValues(List<String> rawValues) {
 
-            List<String> values = new ArrayList<String>();
+            List<String> values = Lists.newArrayList();
 
-            Pattern stringInSquareBrackets = Pattern.compile("\\[(.*?)\\]");
-            Matcher regexMatcher = stringInSquareBrackets.matcher(rawValues.get(0).replace(" ", ""));
+            Matcher regexMatcher = STRING_IN_SQUARE_BRACKETS.matcher(rawValues.get(0).replace(" ", ""));
             while (regexMatcher.find()) {
                 values.add(regexMatcher.group(1));
             }
