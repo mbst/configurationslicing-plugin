@@ -20,7 +20,7 @@ import jenkins.model.Jenkins;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Extension
+//@Extension // Disabled until I fix it
 public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProject<?,?>> {
 
 
@@ -35,7 +35,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
         public static final String NOTHING = "(NOTHING)";
 
         @Override
-        public String getName() { return "Promoted Builds Names"; }
+        public String getName() { return "Promoted Builds Names [DO NOT USE]"; }
 
         @Override
         public String getUrl() { return "promotedbuilds"; }
@@ -67,9 +67,9 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
             List<String> valuesList = Lists.newArrayList();
 
-            if (property != null && !property.getActiveItems().isEmpty()) {
+            if (property != null && !property.getItems().isEmpty()) {
                 String nameString = "";
-                for(PromotionProcess process : property.getActiveItems()) {
+                for(PromotionProcess process : property.getItems()) {
                     nameString = String.format("%s[%s] ", nameString, process.getName());
                 }
                 valuesList.add(nameString.trim());
@@ -100,19 +100,19 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
             }
 
             if(rawValues.get(0).equals(NOTHING)) {
-                property.getActiveItems().removeAll(property.getActiveItems());
+                property.getItems().removeAll(property.getActiveItems());
                 return true;
             }
 
             Map<String, PromotionProcess> oldPromotions = Maps.newHashMap();
-            for(PromotionProcess promotionProcess : property.getActiveItems()) {
+            for(PromotionProcess promotionProcess : property.getItems()) {
                 oldPromotions.put(promotionProcess.getName(), promotionProcess);
             }
 
             // Remove old promotions
             for(Map.Entry<String, PromotionProcess> oldEntry : oldPromotions.entrySet()) {
                 if(!values.contains(oldEntry.getKey())) {
-                    property.getActiveItems().remove(oldEntry.getValue());
+                    property.getItems().remove(oldEntry.getValue());
                 }
             }
 
@@ -129,7 +129,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 }
             }
             try {
-                item.addProperty(property);
+                item.save();
             } catch (IOException e) {
                 Throwables.propagate(e);
             }

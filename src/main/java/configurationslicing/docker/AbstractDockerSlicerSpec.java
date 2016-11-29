@@ -44,7 +44,7 @@ public abstract class AbstractDockerSlicerSpec
     @Override
     public List<AbstractProject<?, ?>> getWorkDomain() {
         ImmutableList.Builder<AbstractProject<?,?>> filteredProjects = ImmutableList.builder();
-        List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class));
+        List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
 
         for (AbstractProject project: allProjects) {
             if (project instanceof Project || project instanceof MatrixProject) {
