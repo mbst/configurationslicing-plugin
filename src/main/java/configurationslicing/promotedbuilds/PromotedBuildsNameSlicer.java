@@ -6,7 +6,9 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.common.base.Optional;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import configurationslicing.UnorderedStringSlicer;
@@ -49,15 +51,22 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
         @Override
         public List<AbstractProject<?,?>> getWorkDomain() {
-            List<AbstractProject<?,?>> filteredProjects = Lists.newArrayList();
-            List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
+            ImmutableList.Builder<AbstractProject<?,?>> filteredProjects = ImmutableList.builder();
+            List<AbstractProject> allProjects = Lists.newArrayList();
 
-            for (AbstractProject project: allProjects) {
+            Optional<Jenkins> jenkins = Optional.fromNullable(Jenkins.getInstance());
+
+            if(jenkins.isPresent()) {
+                allProjects.addAll(jenkins.get().getAllItems(AbstractProject.class));
+            }
+
+            for (AbstractProject project : allProjects) {
                 if (project instanceof Project || project instanceof MatrixProject) {
                     filteredProjects.add(project);
                 }
             }
-            return filteredProjects;
+
+            return filteredProjects.build();
         }
 
         @Override
@@ -74,7 +83,7 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 }
                 valuesList.add(nameString.trim());
             }
-            if (valuesList.isEmpty() || valuesList.get(0).equals("")) {
+            if (valuesList.isEmpty() || ("").equals(valuesList.get(0))) {
                 valuesList.add(NOTHING);
             }
 
@@ -99,35 +108,20 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 }
             }
 
-            if(rawValues.get(0).equals(NOTHING)) {
+            if (rawValues.get(0).equals(NOTHING)) {
                 property.getItems().removeAll(property.getActiveItems());
                 return true;
             }
 
             Map<String, PromotionProcess> oldPromotions = Maps.newHashMap();
-            for(PromotionProcess promotionProcess : property.getItems()) {
+            for (PromotionProcess promotionProcess : property.getItems()) {
                 oldPromotions.put(promotionProcess.getName(), promotionProcess);
             }
 
-            // Remove old promotions
-            for(Map.Entry<String, PromotionProcess> oldEntry : oldPromotions.entrySet()) {
-                if(!values.contains(oldEntry.getKey())) {
-                    property.getItems().remove(oldEntry.getValue());
-                }
-            }
+            removeOldPromotions(oldPromotions, values, property);
 
-            // Add new promotions
-            for(String newName : values) {
-                if (!oldPromotions.keySet().contains(newName)) {
-                    try {
-                        property.addProcess(newName);
-                    } catch (IOException e) {
-                        log.error("Failed to add promotion process {} to project {}", newName, item.getName());
-                        Throwables.propagate(e);
-                        return false;
-                    }
-                }
-            }
+            addNewPromotions(oldPromotions, values, property);
+
             try {
                 item.save();
             } catch (IOException e) {
@@ -159,6 +153,34 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 log.error("Failed to create new property for project {}", item.getName());
                 Throwables.propagate(e);
                 return null;
+            }
+        }
+
+        private void removeOldPromotions(
+                Map<String, PromotionProcess> oldPromotions,
+                List<String> values,
+                JobPropertyImpl property
+        ) {
+            for (Map.Entry<String, PromotionProcess> oldEntry : oldPromotions.entrySet()) {
+                if (!values.contains(oldEntry.getKey())) {
+                    property.getItems().remove(oldEntry.getValue());
+                }
+            }
+        }
+
+        private void addNewPromotions(
+                Map<String, PromotionProcess> oldPromotions,
+                List<String> values,
+                JobPropertyImpl property
+        ) {
+            for (String newName : values) {
+                if (!oldPromotions.keySet().contains(newName)) {
+                    try {
+                        property.addProcess(newName);
+                    } catch (IOException e) {
+                        log.error("Failed to add promotion process {}", newName, e);
+                    }
+                }
             }
         }
 

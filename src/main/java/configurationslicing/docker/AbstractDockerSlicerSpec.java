@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.List;
 
 import com.cloudbees.dockerpublish.DockerBuilder;
-import com.google.common.base.Throwables;
+import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import configurationslicing.UnorderedStringSlicer.UnorderedStringSlicerSpec;
@@ -44,13 +44,20 @@ public abstract class AbstractDockerSlicerSpec
     @Override
     public List<AbstractProject<?, ?>> getWorkDomain() {
         ImmutableList.Builder<AbstractProject<?,?>> filteredProjects = ImmutableList.builder();
-        List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
+        List<AbstractProject> allProjects = Lists.newArrayList();
 
-        for (AbstractProject project: allProjects) {
+        Optional<Jenkins> jenkins = Optional.fromNullable(Jenkins.getInstance());
+
+        if(jenkins.isPresent()) {
+            allProjects.addAll(jenkins.get().getAllItems(AbstractProject.class));
+        }
+
+        for (AbstractProject project : allProjects) {
             if (project instanceof Project || project instanceof MatrixProject) {
                 filteredProjects.add(project);
             }
         }
+
         return filteredProjects.build();
     }
 
@@ -88,24 +95,14 @@ public abstract class AbstractDockerSlicerSpec
             oldBuilders[i] = dockerBuildersList.get(i);
         }
 
-        for (int i = 0; i < values.size(); i++) {
-            String value = values.get(i);
-            if(value.equals(NOTHING)) {
-                continue;
-            }
-            newBuilders[i] = copyOf(oldBuilders[i]);
-
-            if(oldBuilders[i] != null && !getSliceParam(oldBuilders[i]).equals(value)) {
-                if(valueIsNotWritable(value)) {
-                    value = "";
-                }
-                newBuilders[i] = setSliceParam(newBuilders[i], value);
-            }
-        }
+        setUpNewBuilders(oldBuilders, newBuilders, values);
 
         // perform any replacements
         for (int i = 0; i < oldBuilders.length; i++) {
-            if (oldBuilders[i] != null && newBuilders[i] != null && sliceParamIsDifferent(oldBuilders[i], newBuilders[i])) {
+            if (oldBuilders[i] != null
+                    && newBuilders[i] != null
+                    && sliceParamIsDifferent(oldBuilders[i], newBuilders[i])
+                    ) {
                 log.info(
                         "Updating DockerBuilder config {} for project {}",
                         getUrl(),
@@ -170,14 +167,38 @@ public abstract class AbstractDockerSlicerSpec
         }
     }
 
-    private void checkNoNewBuilders(DockerBuilder[] oldBuilders, DockerBuilder[] newBuilders, int listSize) {
+    private void checkNoNewBuilders(
+            DockerBuilder[] oldBuilders,
+            DockerBuilder[] newBuilders,
+            int listSize
+    ) {
         for (int i = 0; i < listSize; i++) {
             if (oldBuilders[i] == null && newBuilders[i] != null) {
-                Throwables.propagate(
-                        new IllegalStateException(
-                                "New builder exists when it shouldn't: " + newBuilders[i].getRepoName()
-                        )
+                log.error(
+                        "New builder exists when it shouldn't: "
+                                + newBuilders[i].getRepoName()
                 );
+            }
+        }
+    }
+
+    private void setUpNewBuilders(
+            DockerBuilder[] oldBuilders,
+            DockerBuilder[] newBuilders,
+            List<String> values) {
+
+        for (int i = 0; i < values.size(); i++) {
+            String value = values.get(i);
+            if (value.equals(NOTHING)) {
+                continue;
+            }
+            newBuilders[i] = copyOf(oldBuilders[i]);
+
+            if (oldBuilders[i] != null && !getSliceParam(oldBuilders[i]).equals(value)) {
+                if (valueIsNotWritable(value)) {
+                    value = "";
+                }
+                newBuilders[i] = setSliceParam(newBuilders[i], value);
             }
         }
     }
