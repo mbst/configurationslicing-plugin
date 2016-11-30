@@ -37,34 +37,14 @@ public class DockerRepoNameSlicer extends UnorderedStringSlicer<AbstractProject<
             // setting repo name isn't exposed by the api so we're copying the current one and
             // replacing the repo name using the constructor
             if(value == null || value.isEmpty()) {
-                log.error("Repo name cannot be null or empty for: {}", builder.getRepoName());
+                log.error("Repo name cannot be null or empty for: {}. Builder was not updated.", builder.getRepoName());
                 return builder;
             }
             return setRepoName(builder, value);
         }
 
         private DockerBuilder setRepoName(DockerBuilder oldBuilder, String repoName) {
-
-            DockerBuilder newBuilder = new DockerBuilder(repoName);
-
-            newBuilder.setBuildAdditionalArgs(oldBuilder.getBuildAdditionalArgs());
-            newBuilder.setBuildContext(oldBuilder.getBuildContext());
-            newBuilder.setCreateFingerprint(oldBuilder.isCreateFingerprint());
-            newBuilder.setDockerfilePath(oldBuilder.getDockerfilePath());
-            newBuilder.setDockerToolName(oldBuilder.getDockerToolName());
-            newBuilder.setForcePull(oldBuilder.isForcePull());
-            newBuilder.setForceTag(oldBuilder.isForceTag());
-            newBuilder.setNoCache(oldBuilder.isNoCache());
-            newBuilder.setRepoTag(oldBuilder.getRepoTag());
-            newBuilder.setRegistry(oldBuilder.getRegistry());
-            newBuilder.setServer(oldBuilder.getServer());
-            newBuilder.setSkipBuild(oldBuilder.isSkipBuild());
-            newBuilder.setSkipDecorate(oldBuilder.isSkipDecorate());
-            newBuilder.setSkipPush(oldBuilder.isSkipPush());
-            newBuilder.setSkipTagLatest(oldBuilder.isSkipTagLatest());
-
-            return newBuilder;
-
+            return copyOfWithDifferentName(oldBuilder, repoName);
         }
 
     }

@@ -1,14 +1,16 @@
 package configurationslicing.promotedbuilds;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.common.base.Optional;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import configurationslicing.UnorderedStringSlicer;
 import hudson.Extension;
 import hudson.matrix.MatrixProject;
@@ -20,7 +22,7 @@ import jenkins.model.Jenkins;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Extension
+//@Extension // Disabled until I fix it
 public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProject<?,?>> {
 
 
@@ -29,10 +31,13 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
     public static class PromotedBuildsSlicerSpec extends UnorderedStringSlicerSpec<AbstractProject<?,?>> {
 
         private static final Logger log = LoggerFactory.getLogger(PromotedBuildsSlicerSpec.class);
+
+        private static final Pattern STRING_IN_SQUARE_BRACKETS = Pattern.compile("\\[(.*?)\\]");
+
         public static final String NOTHING = "(NOTHING)";
 
         @Override
-        public String getName() { return "Promoted Builds Names"; }
+        public String getName() { return "Promoted Builds Names [DO NOT USE]"; }
 
         @Override
         public String getUrl() { return "promotedbuilds"; }
@@ -46,15 +51,22 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
         @Override
         public List<AbstractProject<?,?>> getWorkDomain() {
-            List<AbstractProject<?,?>> filteredProjects = new ArrayList<AbstractProject<?,?>>();
-            List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
+            ImmutableList.Builder<AbstractProject<?,?>> filteredProjects = ImmutableList.builder();
+            List<AbstractProject> allProjects = Lists.newArrayList();
 
-            for (AbstractProject project: allProjects) {
+            Optional<Jenkins> jenkins = Optional.fromNullable(Jenkins.getInstance());
+
+            if(jenkins.isPresent()) {
+                allProjects.addAll(jenkins.get().getAllItems(AbstractProject.class));
+            }
+
+            for (AbstractProject project : allProjects) {
                 if (project instanceof Project || project instanceof MatrixProject) {
                     filteredProjects.add(project);
                 }
             }
-            return filteredProjects;
+
+            return filteredProjects.build();
         }
 
         @Override
@@ -62,16 +74,16 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
 
             JobPropertyImpl property = item.getProperty(JobPropertyImpl.class);
 
-            List<String> valuesList = new ArrayList<String>();
+            List<String> valuesList = Lists.newArrayList();
 
-            if (property != null && !property.getActiveItems().isEmpty()) {
+            if (property != null && !property.getItems().isEmpty()) {
                 String nameString = "";
-                for(PromotionProcess process : property.getActiveItems()) {
-                    nameString = (String.format("%s[%s] ", nameString, process.getName()));
+                for(PromotionProcess process : property.getItems()) {
+                    nameString = String.format("%s[%s] ", nameString, process.getName());
                 }
                 valuesList.add(nameString.trim());
             }
-            if (valuesList.isEmpty() || valuesList.get(0).equals("")) {
+            if (valuesList.isEmpty() || ("").equals(valuesList.get(0))) {
                 valuesList.add(NOTHING);
             }
 
@@ -96,45 +108,33 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 }
             }
 
-            if(rawValues.get(0).equals(NOTHING) && property != null) {
-                property.getActiveItems().removeAll(property.getActiveItems());
+            if (rawValues.get(0).equals(NOTHING)) {
+                property.getItems().removeAll(property.getActiveItems());
                 return true;
             }
 
-            Map<String, PromotionProcess> oldPromotions = new HashMap<String, PromotionProcess>();
-            for(PromotionProcess promotionProcess : property.getActiveItems()) {
+            Map<String, PromotionProcess> oldPromotions = Maps.newHashMap();
+            for (PromotionProcess promotionProcess : property.getItems()) {
                 oldPromotions.put(promotionProcess.getName(), promotionProcess);
             }
 
-            // Remove old promotions
-            for(String oldName : oldPromotions.keySet()) {
-                if(!values.contains(oldName)) {
-                    property.getActiveItems().remove(oldPromotions.get(oldName));
-                }
-            }
+            removeOldPromotions(oldPromotions, values, property);
 
-            // Add new promotions
-            for(String newName : values) {
-                if(!oldPromotions.keySet().contains(newName)) {
-                    try {
-                        property.addProcess(newName);
-                    } catch (IOException e) {
-                        log.error("Failed to add promotion process {} to project {}", newName, item.getName());
-                        Throwables.propagate(e);
-                        return false;
-                    }
-                }
-            }
+            addNewPromotions(oldPromotions, values, property);
 
+            try {
+                item.save();
+            } catch (IOException e) {
+                Throwables.propagate(e);
+            }
             return true;
         }
 
         private List<String> parseValues(List<String> rawValues) {
 
-            List<String> values = new ArrayList<String>();
+            List<String> values = Lists.newArrayList();
 
-            Pattern stringInSquareBrackets = Pattern.compile("\\[(.*?)\\]");
-            Matcher regexMatcher = stringInSquareBrackets.matcher(rawValues.get(0).replace(" ", ""));
+            Matcher regexMatcher = STRING_IN_SQUARE_BRACKETS.matcher(rawValues.get(0).replace(" ", ""));
             while (regexMatcher.find()) {
                 values.add(regexMatcher.group(1));
             }
@@ -153,6 +153,34 @@ public class PromotedBuildsNameSlicer extends UnorderedStringSlicer<AbstractProj
                 log.error("Failed to create new property for project {}", item.getName());
                 Throwables.propagate(e);
                 return null;
+            }
+        }
+
+        private void removeOldPromotions(
+                Map<String, PromotionProcess> oldPromotions,
+                List<String> values,
+                JobPropertyImpl property
+        ) {
+            for (Map.Entry<String, PromotionProcess> oldEntry : oldPromotions.entrySet()) {
+                if (!values.contains(oldEntry.getKey())) {
+                    property.getItems().remove(oldEntry.getValue());
+                }
+            }
+        }
+
+        private void addNewPromotions(
+                Map<String, PromotionProcess> oldPromotions,
+                List<String> values,
+                JobPropertyImpl property
+        ) {
+            for (String newName : values) {
+                if (!oldPromotions.keySet().contains(newName)) {
+                    try {
+                        property.addProcess(newName);
+                    } catch (IOException e) {
+                        log.error("Failed to add promotion process {}", newName, e);
+                    }
+                }
             }
         }
 

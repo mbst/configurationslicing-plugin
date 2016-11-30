@@ -1,11 +1,11 @@
 package configurationslicing.docker;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 import com.cloudbees.dockerpublish.DockerBuilder;
-import com.google.common.base.Throwables;
+import com.google.common.base.Optional;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import configurationslicing.UnorderedStringSlicer.UnorderedStringSlicerSpec;
 import hudson.matrix.MatrixProject;
@@ -18,6 +18,8 @@ import jenkins.model.Jenkins;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 public abstract class AbstractDockerSlicerSpec
         extends UnorderedStringSlicerSpec<AbstractProject<?, ?>> {
 
@@ -26,8 +28,6 @@ public abstract class AbstractDockerSlicerSpec
     public static final String NOTHING = "(Nothing)";
     public static final String DEFAULT = "(Default)";
 
-    public abstract String getName();
-    public abstract String getUrl();
     public abstract String getSliceParam(DockerBuilder builder);
     public abstract DockerBuilder setSliceParam(DockerBuilder builder, String value);
 
@@ -43,21 +43,29 @@ public abstract class AbstractDockerSlicerSpec
 
     @Override
     public List<AbstractProject<?, ?>> getWorkDomain() {
-        List<AbstractProject<?, ?>> filteredProjects = new ArrayList<AbstractProject<?, ?>>();
-        List<AbstractProject> allProjects = Jenkins.getInstance().getAllItems(AbstractProject.class);
-        for (AbstractProject project: allProjects) {
+        ImmutableList.Builder<AbstractProject<?,?>> filteredProjects = ImmutableList.builder();
+        List<AbstractProject> allProjects = Lists.newArrayList();
+
+        Optional<Jenkins> jenkins = Optional.fromNullable(Jenkins.getInstance());
+
+        if(jenkins.isPresent()) {
+            allProjects.addAll(jenkins.get().getAllItems(AbstractProject.class));
+        }
+
+        for (AbstractProject project : allProjects) {
             if (project instanceof Project || project instanceof MatrixProject) {
                 filteredProjects.add(project);
             }
         }
-        return filteredProjects;
+
+        return filteredProjects.build();
     }
 
 
     @Override
     public List<String> getValues(AbstractProject<?,?> item) {
 
-        List<String> valuesList = new ArrayList<String>();
+        List<String> valuesList = Lists.newArrayList();
 
         DescribableList<Builder, Descriptor<Builder>> buildersList = getBuildersList(item);
         List<DockerBuilder> builders = getDockerBuildersList(buildersList);
@@ -78,29 +86,23 @@ public abstract class AbstractDockerSlicerSpec
         DescribableList<Builder, Descriptor<Builder>> buildersList = getBuildersList(item);
         List<DockerBuilder> dockerBuildersList = getDockerBuildersList(buildersList);
 
-        int maxListSize = Math.max(values.size(), dockerBuildersList.size());
-        DockerBuilder[] oldBuilders = new DockerBuilder[maxListSize];
-        DockerBuilder[] newBuilders = new DockerBuilder[maxListSize];
+        int listSize = dockerBuildersList.size();
+
+        DockerBuilder[] oldBuilders = new DockerBuilder[listSize];
+        DockerBuilder[] newBuilders = new DockerBuilder[listSize];
 
         for (int i = 0; i < dockerBuildersList.size(); i++) {
             oldBuilders[i] = dockerBuildersList.get(i);
         }
 
-        for (int i = 0; i < values.size(); i++) {
-            String value = values.get(i);
-            newBuilders[i] = oldBuilders[i];
-
-            if(oldBuilders[i] != null && !getSliceParam(oldBuilders[i]).equals(value)) {
-                if(valueIsNotWritable(value)) {
-                    value = "";
-                }
-                newBuilders[i] = setSliceParam(newBuilders[i], value);
-            }
-        }
+        setUpNewBuilders(oldBuilders, newBuilders, values);
 
         // perform any replacements
-        for (int i = 0; i < maxListSize; i++) {
-            if (oldBuilders[i] != null && newBuilders[i] != null && oldBuilders[i] != newBuilders[i]) {
+        for (int i = 0; i < oldBuilders.length; i++) {
+            if (oldBuilders[i] != null
+                    && newBuilders[i] != null
+                    && sliceParamIsDifferent(oldBuilders[i], newBuilders[i])
+                    ) {
                 log.info(
                         "Updating DockerBuilder config {} for project {}",
                         getUrl(),
@@ -110,19 +112,8 @@ public abstract class AbstractDockerSlicerSpec
             }
         }
 
-        // add any new ones (this shouldn't happen)
-        for (int i = 0; i < maxListSize; i++) {
-            if (oldBuilders[i] == null && newBuilders[i] != null) {
-                buildersList.add(newBuilders[i]);
-                log.error(
-                        "Added new DockerBuilder to builders list on project {} because of {}. "
-                                + "This builder will not be set up correctly and will require "
-                                + "manual configuration on the project configuration page.",
-                        item.getFullName(),
-                        getUrl()
-                );
-            }
-        }
+        // in case a new builder was generated somehow
+        checkNoNewBuilders(oldBuilders, newBuilders, listSize);
 
         return true;
     }
@@ -136,6 +127,7 @@ public abstract class AbstractDockerSlicerSpec
         } else if (item instanceof MatrixProject) {
             return ((MatrixProject) item).getBuildersList();
         } else {
+            log.info("No builders found for project: {}", item.getDisplayName());
             return null;
         }
 
@@ -148,7 +140,7 @@ public abstract class AbstractDockerSlicerSpec
     }
 
     private boolean valueIsNotWritable(String value) {
-        return (value.isEmpty() || value.equals(NOTHING) || value.equals(DEFAULT));
+        return value.isEmpty() || value.equals(NOTHING) || value.equals(DEFAULT);
     }
 
     private void replaceBuilder(
@@ -168,10 +160,77 @@ public abstract class AbstractDockerSlicerSpec
             builders.replaceBy(newList);
         } catch (IOException e) {
             log.error(
-                    "Failed to update DockerBuilder config {}",
-                    getUrl()
+                    "Failed to update DockerBuilder config: {}. Check permissions on config.xml",
+                    getUrl(),
+                    e
             );
-            Throwables.propagate(e);
         }
+    }
+
+    private void checkNoNewBuilders(
+            DockerBuilder[] oldBuilders,
+            DockerBuilder[] newBuilders,
+            int listSize
+    ) {
+        for (int i = 0; i < listSize; i++) {
+            if (oldBuilders[i] == null && newBuilders[i] != null) {
+                log.error(
+                        "New builder exists when it shouldn't: "
+                                + newBuilders[i].getRepoName()
+                );
+            }
+        }
+    }
+
+    private void setUpNewBuilders(
+            DockerBuilder[] oldBuilders,
+            DockerBuilder[] newBuilders,
+            List<String> values) {
+
+        for (int i = 0; i < values.size(); i++) {
+            String value = values.get(i);
+            if (value.equals(NOTHING)) {
+                continue;
+            }
+            newBuilders[i] = copyOf(oldBuilders[i]);
+
+            if (oldBuilders[i] != null && !getSliceParam(oldBuilders[i]).equals(value)) {
+                if (valueIsNotWritable(value)) {
+                    value = "";
+                }
+                newBuilders[i] = setSliceParam(newBuilders[i], value);
+            }
+        }
+    }
+
+    private boolean sliceParamIsDifferent(DockerBuilder oldBuilder, DockerBuilder newBuilder) {
+        return !getSliceParam(oldBuilder).equals(getSliceParam(newBuilder));
+    }
+
+    private DockerBuilder copyOf(DockerBuilder dockerBuilder) {
+        return copyOfWithDifferentName(dockerBuilder, dockerBuilder.getRepoName());
+    }
+
+    DockerBuilder copyOfWithDifferentName(DockerBuilder oldBuilder, String repoName) {
+
+        DockerBuilder newBuilder = new DockerBuilder(checkNotNull(repoName));
+
+        newBuilder.setBuildAdditionalArgs(oldBuilder.getBuildAdditionalArgs());
+        newBuilder.setBuildContext(oldBuilder.getBuildContext());
+        newBuilder.setCreateFingerprint(oldBuilder.isCreateFingerprint());
+        newBuilder.setDockerfilePath(oldBuilder.getDockerfilePath());
+        newBuilder.setDockerToolName(oldBuilder.getDockerToolName());
+        newBuilder.setForcePull(oldBuilder.isForcePull());
+        newBuilder.setForceTag(oldBuilder.isForceTag());
+        newBuilder.setNoCache(oldBuilder.isNoCache());
+        newBuilder.setRepoTag(oldBuilder.getRepoTag());
+        newBuilder.setRegistry(oldBuilder.getRegistry());
+        newBuilder.setServer(oldBuilder.getServer());
+        newBuilder.setSkipBuild(oldBuilder.isSkipBuild());
+        newBuilder.setSkipDecorate(oldBuilder.isSkipDecorate());
+        newBuilder.setSkipPush(oldBuilder.isSkipPush());
+        newBuilder.setSkipTagLatest(oldBuilder.isSkipTagLatest());
+
+        return newBuilder;
     }
 }
